@@ -1,100 +1,102 @@
 ---
-name: nativephp-development
+name: NativePHP Development
 description: >-
   Build native desktop and mobile applications with NativePHP and Laravel.
-  Use when creating, configuring, or working on NativePHP apps — including
-  running on simulators/devices, accessing native APIs (camera, biometrics,
-  notifications, geolocation, secure storage), building EDGE native UI
-  components, handling deep links, push notifications, and deploying to the
-  App Store or Google Play.
+  Use when creating or working on NativePHP apps — including native API access
+  (camera, biometrics, geolocation, secure storage, push notifications),
+  EDGE native UI components, deep links, offline-first SQLite databases,
+  and deploying to the App Store, Google Play, or as desktop distributables.
+compatible_agents:
+  - Claude Code
+  - Cursor
+  - Windsurf
+  - GitHub Copilot
+tags:
+  - nativephp
+  - mobile
+  - desktop
+  - ios
+  - android
+  - native
+  - offline
 ---
 
 # NativePHP Development
 
-## Overview
+## Context
 
-NativePHP lets you build true native desktop (Electron/Tauri) and mobile
-(iOS/Android) apps using PHP and Laravel — no Swift, Kotlin, or JavaScript
-frameworks required. PHP is bundled directly into the app and bridges into
-native OS/device APIs via facades and events.
+NativePHP lets Laravel developers build true native desktop and mobile apps
+using PHP — no Swift, Kotlin, or JavaScript frameworks required. PHP is
+compiled and bundled into the app, with bridges into native OS/device APIs
+exposed via familiar Laravel facades.
 
-There are two separate packages:
+Two separate packages exist:
 
-- **Mobile** (`nativephp/mobile`) — iOS & Android, runs inside Swift/Kotlin shell
-- **Desktop** (`nativephp/electron` or `nativephp/tauri`) — macOS, Windows, Linux
+- **Mobile** (`nativephp/mobile`) — iOS & Android via Swift/Kotlin shell (v3+)
+- **Desktop** (`nativephp/electron`) — macOS, Windows, Linux via Electron
 
-## When to Use This Skill
+The entire Laravel ecosystem works on-device: Eloquent ORM, routing,
+Artisan, events, middleware, queues. No web server is required — the app
+runs completely offline-first.
 
-- Creating a new NativePHP mobile or desktop app
-- Installing and configuring NativePHP in an existing Laravel project
-- Accessing native device APIs (camera, biometrics, GPS, scanner, etc.)
-- Building EDGE native UI components (TopBar, BottomNav, SideNav)
-- Implementing deep links, push notifications, or offline-first patterns
-- Running the app on simulators or real devices
-- Preparing and submitting builds to App Store / Google Play
+## Rules
 
----
+### General
+- Always check `app()->runningInNativePHP()` before running native-only code
+- Use `Storage::disk('local')` for file paths — never hardcode absolute paths
+- Run migrations on first boot via `AppServiceProvider::boot()`, not manually
+- Prefer `--force` with migrations only in production NativePHP context
+- Use standard Laravel routing; the entry point is always the `/` route
 
-## Mobile (iOS & Android)
+### Mobile
+- Use **SQLite** as the on-device database (`DB_CONNECTION=sqlite`)
+- Never store tokens, passwords, or PII in SQLite — always use `SecureStorage`
+- Never assume internet connectivity — always guard with `Network::isOnline()`
+- Use token-based auth stored in `SecureStorage`, not Laravel sessions
+- Register EDGE components (TopBar, BottomNav) inside middleware, not controllers
+- Use `php artisan native:run --watch` for hot reload during development
+- Never run `npm run dev` for mobile — NativePHP handles assets via Vite internally
 
-### Installation
+### Desktop
+- Use `Window::open()` to manage application windows programmatically
+- Define `Menu::create()` in a `NativeAppServiceProvider` to keep it organized
+- Use `Notification::send()` for OS-level notifications, not browser alerts
+
+## Examples
+
+### Installation (Mobile)
 
 ```bash
 composer require nativephp/mobile
 php artisan native:install
 ```
 
-Requires: PHP 8.2+, Laravel 11+, Xcode (iOS), Android Studio (Android).
-
-### Dev Commands
-
-```bash
-php artisan native:run           # Run on default simulator
-php artisan native:run ios       # iOS simulator
-php artisan native:run android   # Android emulator
-php artisan native:run --watch   # Hot reload on simulator
-php artisan native:build ios     # Production build
-php artisan native:build android
-```
-
-### Configuration
-
-Publish and edit `config/nativephp.php`:
+### Configuration (`config/nativephp.php`)
 
 ```php
 return [
-    'app_id'      => env('NATIVEPHP_APP_ID', 'com.example.myapp'),
-    'app_name'    => env('APP_NAME', 'My App'),
-    'app_version' => env('NATIVEPHP_APP_VERSION', '1.0.0'),
+    'app_id'          => env('NATIVEPHP_APP_ID', 'com.example.myapp'),
+    'app_name'        => env('APP_NAME', 'My App'),
+    'app_version'     => env('NATIVEPHP_APP_VERSION', '1.0.0'),
     'deeplink_scheme' => env('NATIVEPHP_DEEPLINK_SCHEME', 'myapp'),
 ];
 ```
 
-### Routing
+### Dev Commands (Mobile)
 
-Mobile apps use standard Laravel routing. The entry point is the `/` route.
-Keep routes stateless-friendly — sessions persist on-device via SQLite.
-
-```php
-// routes/web.php
-Route::get('/', [HomeController::class, 'index']);
-Route::get('/profile', [ProfileController::class, 'show'])->middleware('auth');
+```bash
+php artisan native:run              # default simulator
+php artisan native:run ios          # iOS simulator
+php artisan native:run android      # Android emulator
+php artisan native:run --watch      # hot reload
+php artisan native:build ios        # production build
+php artisan native:build android
 ```
 
-### Database (Offline-First)
-
-Mobile apps use **SQLite on-device** via Laravel Eloquent — the full ORM works
-exactly as in web apps.
+### Auto-migrate on Boot
 
 ```php
-// .env
-DB_CONNECTION=sqlite
-DB_DATABASE=/absolute/path/to/database.sqlite  # auto-resolved by NativePHP
-```
-
-Run migrations on first boot using the `AppServiceProvider`:
-
-```php
+// app/Providers/AppServiceProvider.php
 public function boot(): void
 {
     if (app()->runningInNativePHP()) {
@@ -103,60 +105,55 @@ public function boot(): void
 }
 ```
 
----
+### Offline-First SQLite
 
-## Native API Plugins (Mobile)
-
-Install core plugins as needed:
-
-```bash
-composer require nativephp/camera
-composer require nativephp/secure-storage
-composer require nativephp/geolocation
-composer require nativephp/biometrics
-composer require nativephp/scanner
-composer require nativephp/push-notifications  # Firebase
+```php
+// .env
+DB_CONNECTION=sqlite
 ```
 
-### Camera
+Use standard Eloquent — everything works identically to a web Laravel app.
+
+### Native API: Camera
 
 ```php
 use Native\Mobile\Facades\Camera;
 
 Camera::getPhoto(function (string $path) {
-    // $path is a temporary local file path
     Storage::disk('local')->put('photo.jpg', file_get_contents($path));
 });
 ```
 
-### Secure Storage (Keychain / Keystore)
+### Native API: SecureStorage (Keychain / Keystore)
 
 ```php
 use Native\Mobile\Facades\SecureStorage;
 
+// Store
 SecureStorage::set('api_token', $token);
+
+// Retrieve
 $token = SecureStorage::get('api_token');
+
+// Delete
 SecureStorage::remove('api_token');
 ```
 
-Never store sensitive credentials in SQLite or the session. Always use
-`SecureStorage` for tokens, passwords, and API keys.
-
-### Biometrics
+### Native API: Biometrics
 
 ```php
 use Native\Mobile\Facades\Biometrics;
 
 Biometrics::promptForBiometricID()
     ->on('success', function () {
-        // Unlock the app or sensitive feature
+        // Proceed to authenticated area
     })
     ->on('failure', function (string $reason) {
         // Handle failure
     });
 ```
 
-### Geolocation
+### Native API: Geolocation
 
 ```php
 use Native\Mobile\Facades\Geolocation;
@@ -166,38 +163,34 @@ Geolocation::getCurrentPosition(function (float $lat, float $lng) {
 });
 ```
 
-### Push Notifications (Firebase)
+### Native API: Push Notifications (Firebase)
 
 ```php
 use Native\Mobile\Facades\PushNotifications;
+use Native\Mobile\Events\PushNotificationReceived;
 
-// Get the FCM token to send to your server
+// Register device token
 PushNotifications::getToken(function (string $token) {
     Http::post('/api/device-tokens', ['token' => $token]);
 });
-```
 
-Listen for incoming notifications in an event listener:
-
-```php
-use Native\Mobile\Events\PushNotificationReceived;
-
+// Handle incoming notifications
 Event::listen(PushNotificationReceived::class, function ($event) {
     // $event->data contains the notification payload
 });
 ```
 
-### QR / Barcode Scanner
+### Native API: QR / Barcode Scanner
 
 ```php
 use Native\Mobile\Facades\Scanner;
 
 Scanner::scan(function (string $value, string $format) {
-    // $format: QR_CODE, EAN_13, etc.
+    // $format: QR_CODE, EAN_13, CODE_128, etc.
 });
 ```
 
-### Network Status
+### Native API: Network Status
 
 ```php
 use Native\Mobile\Facades\Network;
@@ -207,31 +200,16 @@ if (Network::isOnline()) {
 }
 ```
 
----
-
-## EDGE Native UI Components (Mobile v3+)
-
-EDGE renders truly native UI elements (TopBar, BottomNav, SideNav) via
-JSON structures generated from Blade middleware — not web HTML.
-
-### Top Bar
+### EDGE Native UI: TopBar + BottomNav
 
 ```php
 use Native\Mobile\EDGE\TopBar;
+use Native\Mobile\EDGE\BottomNav;
 
+// In middleware
 TopBar::make()
     ->title('Dashboard')
-    ->leftButton(TopBar::backButton())
-    ->rightButton(
-        TopBar::button('settings', 'gear')
-            ->onTap('openSettings')
-    );
-```
-
-### Bottom Navigation
-
-```php
-use Native\Mobile\EDGE\BottomNav;
+    ->rightButton(TopBar::button('settings', 'gear')->onTap('openSettings'));
 
 BottomNav::make()
     ->items([
@@ -241,38 +219,7 @@ BottomNav::make()
     ]);
 ```
 
-### Side Navigation (Drawer)
-
-```php
-use Native\Mobile\EDGE\SideNav;
-
-SideNav::make()
-    ->header('My App')
-    ->items([
-        SideNav::item('Dashboard', 'chart.bar')->route('/'),
-        SideNav::item('Logout', 'arrow.right.square')->action('logout'),
-    ]);
-```
-
-Register EDGE components inside a middleware and apply it to relevant routes:
-
-```php
-// app/Http/Middleware/NativeUiMiddleware.php
-public function handle(Request $request, Closure $next): Response
-{
-    TopBar::make()->title(config('app.name'));
-    BottomNav::make()->items([...]);
-
-    return $next($request);
-}
-```
-
----
-
-## Events (Mobile)
-
-NativePHP fires Laravel events when native actions occur. Listen in
-`EventServiceProvider` or route event listeners:
+### Events
 
 ```php
 use Native\Mobile\Events\AppForegrounded;
@@ -280,41 +227,16 @@ use Native\Mobile\Events\AppBackgrounded;
 use Native\Mobile\Events\DeepLinkReceived;
 
 Event::listen(AppForegrounded::class, function () {
-    // Re-sync data, refresh token, etc.
+    // Re-sync data, refresh tokens
 });
 
 Event::listen(DeepLinkReceived::class, function ($event) {
-    // $event->url — parse and redirect accordingly
-    $path = parse_url($event->url, PHP_URL_PATH);
+    $path = str_replace('myapp://', '/', $event->url);
     redirect($path);
 });
 ```
 
----
-
-## Deep Links
-
-Configure the scheme in `config/nativephp.php`:
-
-```php
-'deeplink_scheme' => 'myapp', // myapp://path/to/screen
-```
-
-Handle in a route or event listener:
-
-```php
-Event::listen(DeepLinkReceived::class, function ($event) {
-    $uri = str_replace('myapp://', '', $event->url);
-    redirect('/' . ltrim($uri, '/'));
-});
-```
-
----
-
-## Authentication (Mobile)
-
-Use standard Laravel Auth. For mobile, prefer token-based auth stored in
-`SecureStorage` rather than sessions:
+### Token-Based Auth (Mobile Pattern)
 
 ```php
 // Login
@@ -329,110 +251,46 @@ SecureStorage::remove('auth_token');
 auth()->logout();
 ```
 
----
-
-## Desktop (Electron)
-
-### Installation
-
-```bash
-composer require nativephp/electron
-php artisan native:install
-```
-
-### Dev & Build Commands
-
-```bash
-php artisan native:serve           # Start dev app
-php artisan native:build           # Build distributable
-php artisan native:build --win     # Windows
-php artisan native:build --mac     # macOS
-php artisan native:build --linux   # Linux
-```
-
-### Desktop Native APIs
+### Desktop: Window, Menu, Notification
 
 ```php
-use Native\Laravel\Facades\Notification;
-use Native\Laravel\Facades\Menu;
 use Native\Laravel\Facades\Window;
-use Native\Laravel\Facades\Clipboard;
-use Native\Laravel\Facades\System;
+use Native\Laravel\Facades\Menu;
+use Native\Laravel\Facades\Notification;
 
-// System notification
-Notification::title('Hello!')
-    ->message('Your task is complete.')
-    ->send();
+Window::open()->width(900)->height(600)->route('dashboard');
 
-// Menu bar
-Menu::create(function (Menu $menu) {
-    $menu->label('File')
-        ->submenu(function (Menu $sub) {
-            $sub->link('Open', 'https://myapp.test/open');
-            $sub->separator();
-            $sub->quit();
-        });
-});
+Menu::create(fn(Menu $menu) =>
+    $menu->label('File')->submenu(fn(Menu $sub) =>
+        $sub->link('Open', '/open')->separator()->quit()
+    )
+);
 
-// Open/manage windows
-Window::open()
-    ->width(800)
-    ->height(600)
-    ->route('dashboard')
-    ->title('Dashboard');
-
-// Clipboard
-Clipboard::text('Copied to clipboard!');
+Notification::title('Done!')->message('Build completed.')->send();
 ```
 
-### Desktop Events
+### Desktop Build Commands
 
-```php
-use Native\Laravel\Events\App\ApplicationBooted;
-use Native\Laravel\Events\Windows\WindowClosed;
-
-Event::listen(ApplicationBooted::class, fn() => /* bootstrap */);
-Event::listen(WindowClosed::class, fn($e) => /* cleanup $e->id */);
+```bash
+php artisan native:serve          # dev
+php artisan native:build --mac    # .dmg
+php artisan native:build --win    # .exe
+php artisan native:build --linux  # .AppImage
 ```
-
----
 
 ## Anti-Patterns
 
-- **Do not** use server-side sessions for auth in mobile — use `SecureStorage`
-- **Do not** assume internet connectivity — always guard with `Network::isOnline()`
-- **Do not** store tokens, passwords, or PII in SQLite — use `SecureStorage`
-- **Do not** call `php artisan migrate:fresh` in production boot — use `--step`
-  or check migration status first
-- **Do not** use absolute file paths for storage — use `Storage::disk('local')`
-- **Do not** run `npm run dev` for mobile — use `php artisan native:run --watch`
+- **Don't** use server-side sessions for auth in mobile — use `SecureStorage`
+- **Don't** assume internet is available — always check `Network::isOnline()`
+- **Don't** store sensitive data in SQLite — use `SecureStorage`
+- **Don't** hardcode file paths — use `Storage::disk('local')`
+- **Don't** run `npm run dev` for mobile — use `php artisan native:run --watch`
+- **Don't** call `migrate:fresh` on boot in production — use `--force` with care
 
----
+## References
 
-## Deployment
-
-### Mobile — App Store / Google Play
-
-1. Set `NATIVEPHP_APP_ID`, `NATIVEPHP_APP_VERSION` in `.env`
-2. Build: `php artisan native:build ios` / `native:build android`
-3. Upload via Xcode Organizer (iOS) or Google Play Console (Android)
-4. Use **Bifrost** (`bifrost.nativephp.com`) for cloud builds if macOS is unavailable
-
-### Desktop — Distribution
-
-```bash
-php artisan native:build --mac    # .dmg
-php artisan native:build --win    # .exe installer
-php artisan native:build --linux  # .AppImage / .deb
-```
-
-Enable auto-updates by configuring `updater` in `config/nativephp.php`.
-
----
-
-## Reference
-
-- Mobile docs: https://nativephp.com/docs/mobile/3/getting-started/introduction
-- Desktop docs: https://nativephp.com/docs/desktop/2/getting-started/introduction
-- Cloud builds: https://bifrost.nativephp.com
-- Plugins: https://nativephp.com/plugins
+- [NativePHP Mobile Docs](https://nativephp.com/docs/mobile/3/getting-started/introduction)
+- [NativePHP Desktop Docs](https://nativephp.com/docs/desktop/2/getting-started/introduction)
+- [EDGE Components](https://nativephp.com/docs/mobile/3/edge-components/introduction)
+- [Core Plugins](https://nativephp.com/plugins)
+- [Bifrost Cloud Builds](https://bifrost.nativephp.com)
